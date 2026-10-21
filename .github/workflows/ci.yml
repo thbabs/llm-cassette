@@ -23,7 +23,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,openai]"
+          python -m pip install -e ".[dev,openai,anthropic]"
       - name: Ruff
         run: |
           ruff check .

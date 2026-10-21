@@ -51,6 +51,7 @@ def test_public_api() -> None:
         "current_cassette",
         "normalise_request",
         "request_hash",
+        "tool",
     }
     assert set(llm_cassette.__all__) == expected
     for name in expected:
