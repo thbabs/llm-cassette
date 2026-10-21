@@ -4,7 +4,7 @@
 
 Record and replay LLM and tool calls as readable JSONL cassettes.
 
-**Status: core, OpenAI, Anthropic, and `@tool`.** `cassette()` records and replays `llm_call` and `tool_call` events through `Cassette.record_or_replay`, including async callables. The optional `openai` extra patches the OpenAI Python SDK 1.x, and the optional `anthropic` extra patches the Anthropic Python SDK 2.x, while a cassette is open. `@tool` records plain Python functions. The pytest plugin and `llm-cassette diff` are still to come.
+**Status: core, OpenAI, Anthropic, `@tool`, and pytest.** `cassette()` records and replays `llm_call` and `tool_call` events through `Cassette.record_or_replay`, including async callables. The optional `openai` extra patches the OpenAI Python SDK 1.x, and the optional `anthropic` extra patches the Anthropic Python SDK 2.x, while a cassette is open. `@tool` records plain Python functions. The pytest plugin opens a cassette for a test that uses `@pytest.mark.cassette` or the `cassette` fixture. `llm-cassette diff` is still to come.
 
 ## Usage
 
@@ -108,9 +108,56 @@ with cassette("cassettes/weather.jsonl", mode="once"):
 
 `get_weather("Paris")` and `get_weather(city="Paris", unit="c")` match, because the recorded arguments include the default `unit`.
 
+## pytest
+
+llm-cassette registers a pytest plugin. Opt in with `@pytest.mark.cassette` or the `cassette` fixture. The cassette sits next to the test module and is named after the test:
+
+`tests/cassettes/test_agent/test_paris.jsonl`
+
+A class method is nested under the class name. A parametrised test includes its id. Characters that are unsafe in a file name are percent-encoded, and `%` is encoded too, so each id gets its own file.
+
+```python
+import pytest
+
+from llm_cassette import tool
+
+
+@tool
+def get_weather(city: str) -> dict[str, str]:
+    return {"city": city}
+
+
+@pytest.mark.cassette
+def test_paris() -> None:
+    assert get_weather("Paris") == {"city": "Paris"}
+```
+
+`@pytest.mark.cassette("weather", mode="replay")` uses `tests/cassettes/test_agent/weather.jsonl` and forces `replay` for that test. On a parametrised test the parameter id is added to that name. The `cassette` fixture is the open `Cassette`.
+
+`--replay-mode` chooses `once` (the default), `replay`, `record`, or `none` for every opted-in test. `replay_mode` in a pytest config file is the same setting. The command line overrides the config file, and `mode=` on the marker overrides both.
+
+| `--replay-mode` | What it does |
+| --- | --- |
+| `once` | Record when the file is missing, and replay it otherwise. |
+| `replay` | Replay the file. A missing file raises `CassetteNotFoundError`. |
+| `record` | Call through and overwrite the file when the test passes. |
+| `none` | Call through and leave the file untouched. |
+
+These are the same modes as `cassette()`. A request that does not match the recording fails the test with `CassetteMismatchError`, and the failure shows the expected and received requests. The plugin leaves `strict` off, so a test that does not replay every recorded interaction still passes. It does not call `install()` for the OpenAI or Anthropic adapters; those patches still have to be installed for SDK calls to be recorded.
+
+`replay` is the mode that fails when a cassette is missing. `none` does not: it never reads the file.
+
+```toml
+[tool.pytest.ini_options]
+replay_mode = "replay"
+```
+
+```bash
+pytest --replay-mode=replay
+```
+
 ## Still to come
 
-- A pytest fixture and `--replay-mode`
 - An `llm-cassette diff` command
 
 ## Development

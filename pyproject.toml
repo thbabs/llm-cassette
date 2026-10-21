@@ -43,6 +43,9 @@ Homepage = "https://github.com/thbabs/llm-cassette"
 Repository = "https://github.com/thbabs/llm-cassette"
 Issues = "https://github.com/thbabs/llm-cassette/issues"
 
+[project.entry-points.pytest11]
+llm_cassette = "llm_cassette.pytest_plugin"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/llm_cassette"]
 
