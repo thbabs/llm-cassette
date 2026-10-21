@@ -12,3 +12,6 @@ repos:
       - id: mypy
         # Replace the hook default `--ignore-missing-imports`.
         args: []
+        additional_dependencies:
+          - pytest>=9.1
+          - openai>=1.66,<2
