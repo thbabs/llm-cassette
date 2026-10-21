@@ -4,7 +4,32 @@
 
 Record and replay LLM and tool calls as readable JSONL cassettes.
 
-**Status: core, OpenAI, Anthropic, `@tool`, and pytest.** `cassette()` records and replays `llm_call` and `tool_call` events through `Cassette.record_or_replay`, including async callables. The optional `openai` extra patches the OpenAI Python SDK 1.x, and the optional `anthropic` extra patches the Anthropic Python SDK 2.x, while a cassette is open. `@tool` records plain Python functions. The pytest plugin opens a cassette for a test that uses `@pytest.mark.cassette` or the `cassette` fixture. `llm-cassette diff` is still to come.
+**Status: 0.1.0.** `cassette()` records and replays `llm_call` and `tool_call` events through `Cassette.record_or_replay`, including async callables. The optional `openai` extra patches the OpenAI Python SDK 1.x, and the optional `anthropic` extra patches the Anthropic Python SDK 2.x, while a cassette is open. `@tool` records plain Python functions. The pytest plugin opens a cassette for a test that uses `@pytest.mark.cassette` or the `cassette` fixture. `llm-cassette diff` compares two cassettes.
+
+## Quickstart
+
+```python
+import pytest
+from llm_cassette import tool
+
+
+@tool
+def get_weather(city: str) -> dict[str, int]:
+    return {"temp": 18}
+
+
+@pytest.mark.cassette
+def test_paris() -> None:
+    assert get_weather("Paris") == {"temp": 18}
+```
+
+Put that in `tests/test_agent.py`. The first run writes `tests/cassettes/test_agent/test_paris.jsonl`. The next run replays that file and does not call `get_weather`. A different request fails the test with `CassetteMismatchError`.
+
+```bash
+llm-cassette diff old.jsonl new.jsonl
+```
+
+The command exits 0 when the cassettes match and 1 when they do not. A missing or invalid file exits 2.
 
 ## Usage
 
@@ -156,9 +181,70 @@ replay_mode = "replay"
 pytest --replay-mode=replay
 ```
 
-## Still to come
+## Example
 
-- An `llm-cassette diff` command
+`examples/openai_agent.py` is a two-step OpenAI agent. The model requests `get_weather`, the cassette supplies the temperature, and the model answers. Replay reads `examples/cassettes/weather.jsonl`. No API key and no network:
+
+```bash
+python examples/openai_agent.py
+```
+
+`examples/test_openai_agent.py` runs that replay under pytest. CI installs the OpenAI extra and does not set a key.
+
+## Diff
+
+`llm-cassette diff A.jsonl B.jsonl` compares interactions in order. It reports events that were added, removed, or changed. A changed `llm_call` shows a unified diff of the normalised request, the response, or both. A tool call's result is the response. Event numbers start at 1 and skip the header line.
+
+Requests are normalised the same way recording is: volatile ids and timestamps are removed, and secret fields are redacted. Responses keep recorded ids and timestamps, because replay rebuilds SDK objects from them, and secret fields are redacted there too. Two files can differ on disk and still compare equal when the only request changes are volatile fields.
+
+```text
+--- old.jsonl
++++ new.jsonl
+
+1 added, 1 changed
+
+changed llm_call 1 (openai)
+request:
+--- old.jsonl request
++++ new.jsonl request
+@@ -1,6 +1,6 @@
+ {
+   "provider": "openai",
+   "request": {
+-    "model": "gpt-4o"
++    "model": "gpt-4o-mini"
+   }
+ }
+
+added tool_call 2 (get_weather)
+request:
+{
+  "args": {
+    "city": "Paris"
+  },
+  "name": "get_weather"
+}
+```
+
+Exit 0 when that report says the cassettes are identical. Exit 1 when it lists changes. Exit 2 when a path is missing or the file is not a cassette. The command only reads the files.
+
+## Limitations
+
+- The OpenAI adapter covers `chat.completions.create` and `responses.create` on the Python SDK 1.x. The Anthropic adapter covers `messages.create` and `messages.stream` on the Python SDK 2.x. Other providers, other methods, and raw HTTP are not recorded.
+- SDK calls are recorded only after `install()`. The pytest plugin does not call it.
+- One cassette is not safe for concurrent use. An async `record_or_replay` has to be awaited.
+- Recorded values have to be JSON. Tuples become lists. Datetimes, bytes, and other objects are rejected.
+- Secret redaction matches field names such as `api_key`, `authorization`, and `token`. A secret written in ordinary text is stored as text. Read a cassette before committing it.
+- Volatile-field removal matches key names. A request field named `id` is dropped wherever it sits, including an OpenAI tool call's `id`. `tool_call_id` is kept. Response ids and timestamps are kept. `llm-cassette diff` follows those rules: a response id change shows up, and a request id change does not.
+- Matching walks the file in order. The same request twice is two interactions. The default comparison is a hash of the normalised request, not a comparison of the response.
+- The pytest plugin leaves `strict` off, so a test can pass without replaying every recorded interaction. `replay` fails when the file is missing. `none` does not read the file.
+
+## Roadmap
+
+- Adapters for more SDKs and methods.
+- A way to choose which field names are secret or volatile.
+- A pytest option that installs the OpenAI and Anthropic adapters.
+- An opt-in strict default, so unused interactions fail once a suite asks for that.
 
 ## Development
 
@@ -175,4 +261,8 @@ mypy
 pytest
 ```
 
-CI runs ruff, mypy, and pytest on Python 3.10, 3.11, 3.12, and 3.13.
+CI runs ruff, mypy, and pytest on Python 3.10, 3.11, 3.12, and 3.13. That includes `examples/test_openai_agent.py`.
+
+## Releasing
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`. The tag has to match `pyproject.toml`: `v0.1.0` publishes version `0.1.0`. The workflow builds an sdist and a wheel and publishes them to PyPI with trusted publishing. It does not use an API token.
