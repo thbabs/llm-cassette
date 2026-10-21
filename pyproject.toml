@@ -29,7 +29,7 @@ dependencies = []
 
 [project.optional-dependencies]
 openai = ["openai>=1.66,<2"]
-anthropic = ["anthropic"]
+anthropic = ["anthropic>=2,<3"]
 dev = [
   "mypy>=2.4",
   "pytest>=9.1",

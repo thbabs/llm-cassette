@@ -4,7 +4,7 @@
 
 Record and replay LLM and tool calls as readable JSONL cassettes.
 
-**Status: core and OpenAI.** `cassette()` records and replays `llm_call` and `tool_call` events through `Cassette.record_or_replay`, including async callables. The optional `openai` extra patches the OpenAI Python SDK 1.x while a cassette is open. Anthropic, the `@tool` decorator, the pytest plugin, and `llm-cassette diff` are still to come.
+**Status: core, OpenAI, Anthropic, and `@tool`.** `cassette()` records and replays `llm_call` and `tool_call` events through `Cassette.record_or_replay`, including async callables. The optional `openai` extra patches the OpenAI Python SDK 1.x, and the optional `anthropic` extra patches the Anthropic Python SDK 2.x, while a cassette is open. `@tool` records plain Python functions. The pytest plugin and `llm-cassette diff` are still to come.
 
 ## Usage
 
@@ -67,10 +67,49 @@ with cassette("cassettes/hello.jsonl", mode="once"):
 print(completion.choices[0].message.content)
 ```
 
+## Anthropic
+
+`pip install "llm-cassette[anthropic]"` installs the Anthropic Python SDK 2.x. `install()` patches `messages.create` and `messages.stream` on the sync and async clients while a cassette is open, and restores the original methods when it exits. `create(stream=True)` replays as the SDK's `Stream` or `AsyncStream` of raw message events. `messages.stream()` replays as `MessageStream` or `AsyncMessageStream`, including `text_stream` and `get_final_message()`. That helper is recorded when its context manager is entered, which is when the SDK sends the request. Other calls replay as `anthropic.types.Message` objects. The API key is not written to the cassette.
+
+```python
+from anthropic import Anthropic
+
+from llm_cassette import cassette
+from llm_cassette.anthropic import install
+
+install()
+
+with cassette("cassettes/hello.jsonl", mode="once"):
+    message = Anthropic().messages.create(
+        model="claude-sonnet-5",
+        max_tokens=32,
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+
+print(message.content[0].text)
+```
+
+## Tools
+
+`@tool` records a function's name, its bound arguments (including defaults), and its JSON result as a `tool_call`. Replay returns that result and does not call the function. A different argument raises `CassetteMismatchError`. Async functions work the same way. With no cassette open, the function runs as usual. Results follow the cassette rules: they must be JSON, tuples become lists, and secret fields are redacted.
+
+```python
+from llm_cassette import cassette, tool
+
+
+@tool
+def get_weather(city: str, unit: str = "c") -> dict[str, str]:
+    return {"city": city, "unit": unit}
+
+
+with cassette("cassettes/weather.jsonl", mode="once"):
+    weather = get_weather("Paris")
+```
+
+`get_weather("Paris")` and `get_weather(city="Paris", unit="c")` match, because the recorded arguments include the default `unit`.
+
 ## Still to come
 
-- Anthropic SDK client, including async clients and streaming
-- Recording Python functions decorated with `@tool`
 - A pytest fixture and `--replay-mode`
 - An `llm-cassette diff` command
 
@@ -81,7 +120,7 @@ Requires Python 3.10 or newer.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev,openai]"
+python -m pip install -e ".[dev,openai,anthropic]"
 pre-commit install
 ruff check .
 ruff format --check .

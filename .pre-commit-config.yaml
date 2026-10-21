@@ -15,3 +15,4 @@ repos:
         additional_dependencies:
           - pytest>=9.1
           - openai>=1.66,<2
+          - anthropic>=2,<3
