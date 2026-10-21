@@ -4,7 +4,7 @@
 
 Record and replay LLM and tool calls as readable JSONL cassettes.
 
-**Status: core only.** `cassette()` can record and replay `llm_call` and `tool_call` events through `Cassette.record_or_replay`, including async callables. OpenAI and Anthropic SDK adapters, the `@tool` decorator, the pytest plugin, and `llm-cassette diff` are still to come.
+**Status: core and OpenAI.** `cassette()` records and replays `llm_call` and `tool_call` events through `Cassette.record_or_replay`, including async callables. The optional `openai` extra patches the OpenAI Python SDK 1.x while a cassette is open. Anthropic, the `@tool` decorator, the pytest plugin, and `llm-cassette diff` are still to come.
 
 ## Usage
 
@@ -46,9 +46,30 @@ Before hashing, matching, or writing, volatile fields (`id`, timestamps, and req
 {"type": "tool_call", "name": "get_weather", "args": {"city": "Paris"}, "result": {"temp": 18}}
 ```
 
+## OpenAI
+
+`pip install "llm-cassette[openai]"` installs the OpenAI Python SDK 1.x. `install()` patches `chat.completions.create` and `responses.create` on the sync and async clients while a cassette is open, and restores the original methods when it exits. Replay rebuilds `ChatCompletion` and `Response` objects, and re-emits streams as the SDK's stream objects. The API key is not written to the cassette.
+
+```python
+from openai import OpenAI
+
+from llm_cassette import cassette
+from llm_cassette.openai import install
+
+install()
+
+with cassette("cassettes/hello.jsonl", mode="once"):
+    completion = OpenAI().chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+
+print(completion.choices[0].message.content)
+```
+
 ## Still to come
 
-- OpenAI and Anthropic SDK clients, including async clients and streaming
+- Anthropic SDK client, including async clients and streaming
 - Recording Python functions decorated with `@tool`
 - A pytest fixture and `--replay-mode`
 - An `llm-cassette diff` command
@@ -60,7 +81,7 @@ Requires Python 3.10 or newer.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,openai]"
 pre-commit install
 ruff check .
 ruff format --check .
