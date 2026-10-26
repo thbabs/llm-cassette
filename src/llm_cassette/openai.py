@@ -68,7 +68,9 @@ def install() -> None:
     ``chat.completions.create`` and ``responses.create`` are replaced on the
     sync and async clients for the lifetime of the cassette, then restored.
     Responses are rebuilt as ``ChatCompletion`` and ``Response`` objects.
-    Streams are rebuilt as the SDK's stream objects.
+    Streams are rebuilt as the SDK's stream objects. A per-request
+    ``timeout`` is not recorded: it is a transport setting, not part of
+    the API body.
     """
 
     global _installed
@@ -252,7 +254,7 @@ def _llm_request(endpoint: _Endpoint, kwargs: Mapping[str, Any]) -> dict[str, An
 def _request_body(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     raw: dict[str, Any] = {}
     for key, value in kwargs.items():
-        if _ignored(value):
+        if key == "timeout" or _ignored(value):
             continue
         raw[key] = _to_json(value)
     body = ensure_json(raw)

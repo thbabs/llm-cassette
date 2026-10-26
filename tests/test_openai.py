@@ -610,6 +610,40 @@ def test_replay_mismatch_raises(tmp_path: Path) -> None:
     assert _restored()
 
 
+def test_timeout_is_not_part_of_the_recorded_request(tmp_path: Path) -> None:
+    _reset()
+    path = tmp_path / "timeout.jsonl"
+    replay = _replay_client()
+    with _record_client() as record, cassette(path, mode="record"):
+        recorded_chat = record.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": "hi"}],
+            timeout=httpx.Timeout(5.0, connect=1.0),
+        )
+        recorded_response = record.responses.create(
+            model="gpt-4o-mini",
+            input="hi",
+            timeout=2,
+        )
+    assert _calls == 2
+    text = path.read_text(encoding="utf-8")
+    assert "timeout" not in text
+    with cassette(path, mode="replay"):
+        replayed_chat = replay.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": "hi"}],
+            timeout=30,
+        )
+        replayed_response = replay.responses.create(
+            model="gpt-4o-mini",
+            input="hi",
+        )
+    assert _calls == 2
+    assert replayed_chat.choices[0].message.content == "hello"
+    assert recorded_chat.choices[0].message.content == "hello"
+    assert replayed_response.output_text == recorded_response.output_text == "hello"
+
+
 def test_api_key_is_absent_from_the_cassette(tmp_path: Path) -> None:
     _reset()
     path = tmp_path / "secret.jsonl"

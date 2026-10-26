@@ -73,7 +73,7 @@ Before hashing, matching, or writing, volatile fields (`id`, timestamps, and req
 
 ## OpenAI
 
-`pip install "llm-cassette[openai]"` installs the OpenAI Python SDK 1.x. `install()` patches `chat.completions.create` and `responses.create` on the sync and async clients while a cassette is open, and restores the original methods when it exits. Replay rebuilds `ChatCompletion` and `Response` objects, and re-emits streams as the SDK's stream objects. The API key is not written to the cassette.
+`pip install "llm-cassette[openai]"` installs the OpenAI Python SDK 1.x. `install()` patches `chat.completions.create` and `responses.create` on the sync and async clients while a cassette is open, and restores the original methods when it exits. Replay rebuilds `ChatCompletion` and `Response` objects, and re-emits streams as the SDK's stream objects. The API key is not written to the cassette. A per-request `timeout` is not written either: it never reaches the API body, so recording accepts `httpx.Timeout`, and replay still matches when the timeout changes.
 
 ```python
 from openai import OpenAI
@@ -94,7 +94,7 @@ print(completion.choices[0].message.content)
 
 ## Anthropic
 
-`pip install "llm-cassette[anthropic]"` installs the Anthropic Python SDK 2.x. `install()` patches `messages.create` and `messages.stream` on the sync and async clients while a cassette is open, and restores the original methods when it exits. `create(stream=True)` replays as the SDK's `Stream` or `AsyncStream` of raw message events. `messages.stream()` replays as `MessageStream` or `AsyncMessageStream`, including `text_stream` and `get_final_message()`. That helper is recorded when its context manager is entered, which is when the SDK sends the request. Other calls replay as `anthropic.types.Message` objects. The API key is not written to the cassette.
+`pip install "llm-cassette[anthropic]"` installs the Anthropic Python SDK 2.x. `install()` patches `messages.create` and `messages.stream` on the sync and async clients while a cassette is open, and restores the original methods when it exits. `create(stream=True)` replays as the SDK's `Stream` or `AsyncStream` of raw message events. `messages.stream()` replays as `MessageStream` or `AsyncMessageStream`, including `text_stream` and `get_final_message()`. That helper is recorded when its context manager is entered, which is when the SDK sends the request. Other calls replay as `anthropic.types.Message` objects. The API key is not written to the cassette. A per-request `timeout` is not written either: it never reaches the API body, so recording accepts a timeout object, and replay still matches when the timeout changes.
 
 ```python
 from anthropic import Anthropic
