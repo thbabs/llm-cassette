@@ -55,7 +55,8 @@ def install() -> None:
     ``create(stream=True)`` is replayed as the SDK's raw event stream.
     ``messages.stream()`` is replayed as ``MessageStream`` or
     ``AsyncMessageStream``. Other responses are rebuilt as ``Message``
-    objects.
+    objects. A per-request ``timeout`` is not recorded: it is a transport
+    setting, not part of the API body.
     """
 
     global _installed
@@ -274,7 +275,7 @@ def _llm_request(operation: str, kwargs: Mapping[str, Any]) -> dict[str, Any]:
 def _request_body(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     raw: dict[str, Any] = {}
     for key, value in kwargs.items():
-        if _ignored(value):
+        if key == "timeout" or _ignored(value):
             continue
         raw[key] = _to_json(value)
     body = ensure_json(raw)

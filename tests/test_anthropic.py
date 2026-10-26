@@ -427,6 +427,42 @@ def test_replay_mismatch_raises(tmp_path: Path) -> None:
     assert _restored()
 
 
+def test_timeout_is_not_part_of_the_recorded_request(tmp_path: Path) -> None:
+    _reset()
+    path = tmp_path / "timeout.jsonl"
+    with _record_client() as record, cassette(path, mode="record"):
+        recorded = record.messages.create(
+            model=_MODEL,
+            max_tokens=32,
+            messages=[{"role": "user", "content": "hi"}],
+            timeout=httpx2.Timeout(5.0, connect=1.0),
+        )
+        with record.messages.stream(
+            model=_MODEL,
+            max_tokens=32,
+            messages=[{"role": "user", "content": "hi"}],
+            timeout=1,
+        ) as recorded_stream:
+            recorded_stream.until_done()
+    assert _calls == 2
+    assert "timeout" not in path.read_text(encoding="utf-8")
+    with _replay_client() as replay, cassette(path, mode="replay"):
+        replayed = replay.messages.create(
+            model=_MODEL,
+            max_tokens=32,
+            messages=[{"role": "user", "content": "hi"}],
+            timeout=30,
+        )
+        with replay.messages.stream(
+            model=_MODEL,
+            max_tokens=32,
+            messages=[{"role": "user", "content": "hi"}],
+        ) as replayed_stream:
+            assert replayed_stream.get_final_text() == "hello"
+    assert _calls == 2
+    assert _message_text(recorded) == _message_text(replayed) == "hello"
+
+
 def test_api_key_is_absent_from_the_cassette(tmp_path: Path) -> None:
     _reset()
     path = tmp_path / "secret.jsonl"
